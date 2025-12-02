@@ -1,0 +1,1311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Fashion Designer</title>
+    <!-- Load Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load Three.js for 3D model -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        /* Custom styles for aesthetic */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #9ba0a5;
+        }
+        #design-output-container {
+            min-height: 400px;
+        }
+        #three-container {
+            width: 100%;
+            height: 400px; /* Fixed height for 3D model area */
+            background-color: #e2e8f0;
+            border-radius: 0.5rem;
+            overflow: hidden;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.06);
+        }
+        canvas {
+            display: block;
+        }
+        /* Aesthetic Micro-Interactions */
+        .interactive-button {
+            transition: all 0.2s ease-in-out;
+            transform: translateZ(0);
+        }
+        .interactive-button:hover {
+            box-shadow: 0 4px 15px rgba(49, 46, 129, 0.3);
+            transform: translateY(-1px);
+        }
+        .interactive-button:active {
+            transform: translateY(1px);
+            box-shadow: none;
+        }
+        /* Watermark style for Free Tier */
+        #watermark-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* Allows clicks to pass through */
+            opacity: 0.3;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+        #watermark-text {
+            transform: rotate(-45deg);
+            font-size: 2rem;
+            font-weight: bold;
+            color: #4f46e5;
+            user-select: none;
+            text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.8);
+            padding: 0.5rem;
+            border: 3px solid #4f46e5;
+            border-radius: 0.5rem;
+        }
+        /* Outreach Status fade-in */
+        #outreach-status.opacity-0 {
+            opacity: 0;
+        }
+        #outreach-status.opacity-100 {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+        <header class="text-center mb-10">
+            <h1 class="text-4xl font-extrabold text-gray-900 tracking-tight">AI Fashion Design Studio</h1>
+            <p class="mt-2 text-lg text-gray-600">Describe your vision, choose your materials, and let AI sketch your masterpiece.</p>
+            <!-- Niche Outreach Status -->
+            <div id="outreach-status" class="mt-4 inline-block bg-green-100 text-green-700 p-2 px-4 rounded-full text-xs font-semibold hidden transition-opacity duration-1000 opacity-0">
+                ✅ Launch Success! Initial outreach to Reddit/Designers complete
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Input Form (Col 1) -->
+            <div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-lg h-fit">
+                <h2 class="text-2xl font-semibold mb-6 text-gray-800">1. Design Inputs</h2>
+                
+                <!-- User/Subscription Status Card -->
+                <div id="user-status-card" class="mb-4 p-4 border border-indigo-200 bg-indigo-50 rounded-lg text-sm">
+                    <p class="font-bold text-indigo-700 mb-1">Status: <span id="auth-status" class="font-normal text-gray-500">Connecting...</span></p>
+                    <p class="font-bold text-indigo-700 mb-1">User ID: <span id="current-user-id" class="font-normal text-gray-700 break-all">Awaiting authentication...</span></p>
+                    <p class="font-bold text-indigo-700">Tier: <span id="subscription-tier" class="font-bold text-green-600">Loading...</span></p>
+                    <button id="go-pro-button" class="mt-2 w-full bg-indigo-600 text-white py-1.5 rounded-lg text-xs font-semibold hover:bg-indigo-700 transition duration-150 hidden">
+                        Go Pro (Unlock High-Res)
+                    </button>
+                </div>
+
+                <!-- Usage status -->
+                <div id="usage-status" class="mb-4 p-3 bg-indigo-50 border border-indigo-200 rounded-lg text-sm font-medium text-indigo-700 text-center">
+                    Loading daily usage limit...
+                </div>
+                <form id="design-form">
+
+                    <!-- Outfit Description -->
+                    <div class="mb-4">
+                        <label for="description" class="block text-sm font-medium text-gray-700 mb-1">Outfit Description</label>
+                        <textarea id="description" rows="4" class="w-full border border-gray-300 rounded-lg p-3 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150" placeholder="e.g., A flowy, asymmetrical ballgown with a high slit and intricate beading on the bodice."></textarea>
+                    </div>
+                    
+                    <!-- Image Attachment -->
+                    <div class="mb-4">
+                        <label for="image-upload" class="block text-sm font-medium text-gray-700 mb-2">Reference Image (Optional)</label>
+                        <input type="file" id="image-upload" accept="image/png, image/jpeg, image:webp" class="block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 focus:outline-none p-2.5">
+                        <div id="image-preview-container" class="mt-2 hidden">
+                            <p class="text-xs text-gray-500 mb-1">Preview:</p>
+                            <img id="image-preview" class="max-h-40 w-auto rounded-lg border border-gray-300 shadow-sm" alt="Image Preview">
+                        </div>
+                    </div>
+
+                    <!-- Fabric Selection -->
+                    <div class="mb-4">
+                        <label for="fabric" class="block text-sm font-medium text-gray-700 mb-1">Primary Fabric</label>
+                        <select id="fabric" class="w-full border border-gray-300 rounded-lg p-3 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150">
+                            <option value="Silk">Silk</option>
+                            <option value="Cotton">Cotton</option>
+                            <option value="Denim">Denim</option>
+                            <option value="Leather">Leather</option>
+                            <option value="Velvet">Velvet</option>
+                            <option value="Lace">Lace</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Color Inputs -->
+                    <div class="mb-4">
+                        <label for="color-name" class="block text-sm font-medium text-gray-700 mb-1">Primary Color</label>
+                        <input type="text" id="color-name" value="Deep Crimson" placeholder="e.g., Ocean Blue, Emerald Green" class="w-full border border-gray-300 rounded-lg p-3 mb-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150">
+                        <input type="color" id="color-picker" value="#dc2626" class="w-full h-8 border border-gray-300 rounded-lg p-1">
+                    </div>
+
+                    <!-- Measurement Unit Selector -->
+                    <div class="mb-4">
+                        <label for="measurement-unit" class="block text-sm font-medium text-gray-700 mb-1">Measurement Unit</label>
+                        <select id="measurement-unit" class="w-full border border-gray-300 rounded-lg p-3 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150">
+                            <option value="cm">Centimeters (cm)</option>
+                            <option value="in">Inches (in)</option>
+                        </select>
+                    </div>
+
+                    <!-- Measurement Inputs -->
+                    <div class="grid grid-cols-2 gap-4 mb-6">
+                        <div>
+                            <label for="height" class="block text-sm font-medium text-gray-700 mb-1">Height (<span id="unit-height">cm</span>)</label>
+                            <input type="number" id="height" value="170" min="40" class="w-full border border-gray-300 rounded-lg p-3 focus:ring-indigo-500 focus:border-indigo-500">
+                        </div>
+                        <div>
+                            <label for="bust" class="block text-sm font-medium text-gray-700 mb-1">Bust (<span id="unit-bust">cm</span>)</label>
+                            <input type="number" id="bust" value="90" min="20" class="w-full border border-gray-300 rounded-lg p-3 focus:ring-indigo-500 focus:border-indigo-500">
+                        </div>
+                        <div>
+                            <label for="waist" class="block text-sm font-medium text-gray-700 mb-1">Waist (<span id="unit-waist">cm</span>)</label>
+                            <input type="number" id="waist" value="70" min="10" class="w-full border border-gray-300 rounded-lg p-3 focus:ring-indigo-500 focus:border-indigo-500">
+                        </div>
+                        <div>
+                            <label for="hips" class="block text-sm font-medium text-gray-700 mb-1">Hips (<span id="unit-hips">cm</span>)</label>
+                            <input type="number" id="hips" value="95" min="20" class="w-full border border-gray-300 rounded-lg p-3 focus:ring-indigo-500 focus:border-indigo-500">
+                        </div>
+                    </div>
+
+                    <!-- Generate Button -->
+                    <button type="submit" id="generate-button" class="interactive-button w-full bg-indigo-600 text-white py-3 px-4 rounded-lg font-bold hover:bg-indigo-700 shadow-md">
+                        Generate Design
+                    </button>
+                    <p id="error-message" class="text-red-500 text-sm mt-3 hidden text-center font-medium"></p>
+                </form>
+            </div>
+
+            <!-- Output Display (Cols 2 & 3) -->
+            <div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-lg" id="design-output-container">
+                <h2 class="text-2xl font-semibold mb-6 text-gray-800">2. Generated Concept</h2>
+                
+                <!-- Loading Indicator -->
+                <div id="loading-area" class="text-center py-20 hidden">
+                    <div class="animate-spin inline-block w-8 h-8 border-4 border-t-4 border-indigo-600 border-gray-200 rounded-full"></div>
+                    <p class="mt-4 text-indigo-600 font-medium">AI is sketching your design... please wait.</p>
+                </div>
+
+                <!-- Initial Placeholder / Design Content -->
+                <div id="design-content">
+                    <div id="placeholder-content" class="text-center py-10 text-gray-500">
+                        <svg class="mx-auto h-12 w-12 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 01-3.08-3.08L2.25 12l2.846-.813a4.5 4.5 0 013.08-3.08L9 5.25l.813 2.846a4.5 4.5 0 013.08 3.08L15.75 12l-2.846.813a4.5 4.5 0 01-3.08 3.08zM17.25 8.25L21 12m-3.75 3.75L21 12m0 0l-3.75-3.75M21 12H9" />
+                        </svg>
+                        <h3 class="mt-2 text-sm font-semibold text-gray-900">Start Your Design</h3>
+                        <p class="mt-1 text-sm text-gray-500">Enter your outfit details and measurements to generate a conceptual sketch and 3D preview.</p>
+                    </div>
+
+                    <!-- Sketch and 3D View after generation -->
+                    <div id="results-area" class="hidden">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <!-- 2D Sketch Output -->
+                            <div class="p-3 border border-gray-200 rounded-lg">
+                                <h3 class="font-bold text-lg mb-2 text-gray-700">2D Sketch Concept</h3>
+                                <!-- Container for Image and Watermark -->
+                                <div class="relative rounded-lg shadow-md overflow-hidden">
+                                    <img id="sketch-output" class="w-full h-auto" alt="AI Generated Fashion Sketch">
+                                    <!-- Watermark Overlay -->
+                                    <div id="watermark-overlay" class.list.add('hidden')>
+                                        <p id="watermark-text">StyleSketchAI - Free Tier</p>
+                                    </div>
+                                </div>
+                                
+                                <!-- Download Button for Sketch -->
+                                <button id="download-sketch-btn" class="interactive-button mt-3 w-full bg-gray-700 text-white py-2 px-4 rounded-lg font-medium hover:bg-gray-800 text-sm flex items-center justify-center">
+                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                                    Download Sketch
+                                </button>
+                            </div>
+                            
+                            <!-- 3D Model Output -->
+                            <div class="p-3 border border-gray-200 rounded-lg">
+                                <h3 class="font-bold text-lg mb-2 text-gray-700">3D Mannequin Preview</h3>
+                                <div id="three-container" class="relative">
+                                    <div id="measurement-overlay" class="absolute top-2 left-2 bg-white bg-opacity-80 p-2 text-xs rounded shadow-lg text-gray-800">
+                                        <!-- Measurements will be displayed here -->
+                                    </div>
+                                    <!-- Three.js canvas will be injected here -->
+                                </div>
+                                <!-- Download Button for Data -->
+                                <button id="download-data-btn" class="interactive-button mt-3 w-full bg-gray-700 text-white py-2 px-4 rounded-lg font-medium hover:bg-gray-800 text-sm flex items-center justify-center">
+                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                                    Download Data (JSON)
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Affiliate Link Section -->
+                        <div id="affiliate-links-section" class="mt-6 p-4 border border-yellow-300 bg-yellow-50 rounded-xl shadow-inner">
+                            <h3 class="text-xl font-bold text-yellow-800 mb-3 flex items-center">
+                                <svg class="w-6 h-6 mr-2 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+                                Recommended Materials & Suppliers
+                            </h3>
+                            <p class="text-sm text-yellow-700 mb-4">Ready to start sewing? Find your chosen **<span id="suggested-fabric-name" class="font-semibold"></span>** and other essentials below, sourced from our trusted partners.</p>
+                            <div id="affiliate-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                                <!-- Dynamic affiliate link cards will be inserted here by JavaScript -->
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Feedback Button -->
+    <button id="feedback-btn" class="fixed bottom-6 right-6 bg-indigo-600 text-white p-4 rounded-full shadow-lg hover:bg-indigo-700 transition duration-300 interactive-button z-40" title="Send Feedback">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg>
+    </button>
+
+
+    <!-- Firebase SDK Imports (For Persistence) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, addDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // ====================================================================
+        // FIX: Utilize Canvas-provided global variables for Firebase configuration and authentication
+        // This ensures the app works correctly in the hosting environment.
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        // ====================================================================
+
+        // --- Global Firebase & State Variables ---
+        window.db = null;
+        window.auth = null;
+        window.app = null;
+        window.userId = null;
+        window.isAuthReady = false;
+        
+        // Default subscription level (will be overwritten by Firestore)
+        window.subscriptionLevel = "Free"; 
+        // New global state for persistent usage tracking
+        window.generationsRemaining = null; 
+        window.usageUnsubscribe = null; 
+        window.usageIsSubscribed = false; 
+
+        // --- Global DOM elements for status (Assigned in window.onload) ---
+        let authStatusEl, currentUserIdEl, subscriptionTierEl, goProButtonEl, outreachStatusEl;
+
+
+        /**
+         * Initializes Firebase and authenticates the user using anonymous sign-in (default for static hosting).
+         */
+        async function initFirebaseAndAuth() {
+            try {
+                // FIX: Check if firebaseConfig is null (which happens outside of the Canvas environment)
+                if (!firebaseConfig) {
+                    console.error("Firebase Configuration is missing. Firestore persistence and user status will not work. (Did you deploy the app?)");
+                    if (authStatusEl) authStatusEl.textContent = "Config Error";
+                    window.isAuthReady = true; 
+                    return;
+                }
+                
+                // 1. Initialize Firebase App and Services
+                window.app = initializeApp(firebaseConfig);
+                window.db = getFirestore(window.app);
+                window.auth = getAuth(window.app);
+                
+                setLogLevel('error');
+
+                // 2. Handle Authentication
+                let userCredential;
+                if (initialAuthToken) {
+                    // Use the custom token provided by the environment
+                    userCredential = await signInWithCustomToken(window.auth, initialAuthToken);
+                } else {
+                    // Fallback to anonymous sign-in if no token is provided
+                    userCredential = await signInAnonymously(window.auth);
+                }
+                
+                window.userId = userCredential.user.uid;
+                window.isAuthReady = true;
+
+                // 3. Start listening for user's subscription status
+                subscribeToUserStatus();
+
+            } catch (error) {
+                console.error("Firebase Initialization or Authentication failed:", error);
+                if (authStatusEl) authStatusEl.textContent = "Auth Failed";
+                window.isAuthReady = true; 
+            }
+        }
+        
+        /**
+         * Sets up a real-time listener to the user's subscription document in Firestore.
+         */
+        function subscribeToUserStatus() {
+            if (!window.isAuthReady || !window.db || !window.userId) return;
+            
+            // Define the document path for the user's private status data
+            const statusDocRef = doc(window.db, 
+                `artifacts/${appId}/users/${window.userId}/user_data/status_document`
+            );
+
+            // Real-time listener
+            onSnapshot(statusDocRef, async (docSnap) => {
+                let statusData = { subscriptionLevel: "Free" };
+
+                if (docSnap.exists()) {
+                    statusData = docSnap.data();
+                } else {
+                    // If document doesn't exist, create a default "Free" record
+                    try {
+                        await setDoc(statusDocRef, { 
+                            userId: window.userId, 
+                            subscriptionLevel: "Free",
+                            createdAt: new Date().toISOString() 
+                        }, { merge: true });
+                    } catch (e) {
+                        console.error("Error setting default status document:", e);
+                    }
+                }
+                
+                window.subscriptionLevel = statusData.subscriptionLevel || "Free";
+                updateUserStatusUI();
+                
+            }, (error) => {
+                console.error("Firestore subscription status error:", error);
+                window.subscriptionLevel = "Free"; // Fallback to free tier on error
+                updateUserStatusUI();
+            });
+        }
+        
+        /**
+         * Updates the new UI card with the authenticated status and subscription tier.
+         */
+        function updateUserStatusUI() {
+            if (authStatusEl) authStatusEl.textContent = window.isAuthReady ? "Authenticated" : "Connecting...";
+            if (currentUserIdEl) currentUserIdEl.textContent = window.userId || "N/A";
+
+            if (window.subscriptionLevel === "Pro") {
+                subscriptionTierEl.textContent = "Pro (High-Res Enabled)";
+                subscriptionTierEl.classList.remove('text-red-600');
+                subscriptionTierEl.classList.add('text-indigo-600', 'font-extrabold');
+                goProButtonEl.classList.add('hidden');
+                
+                // If Pro, stop listening to usage limits
+                if (window.usageUnsubscribe) {
+                    window.usageUnsubscribe();
+                    window.usageUnsubscribe = null;
+                    window.usageIsSubscribed = false;
+                    window.generationsRemaining = null; 
+                }
+
+            } else {
+                subscriptionTierEl.textContent = "Free (Standard-Res, Watermarked)";
+                subscriptionTierEl.classList.remove('text-indigo-600', 'font-extrabold');
+                subscriptionTierEl.classList.add('text-red-600');
+                goProButtonEl.classList.remove('hidden');
+
+                // If Free, ensure we are tracking usage limits
+                if (!window.usageIsSubscribed) {
+                    subscribeToUsageLimit();
+                }
+            }
+            
+            // Also update the limits and watermark status whenever the subscription changes
+            checkAndDisplayLimit();
+            updateDownloadButtonsAndWatermark();
+        }
+
+        /**
+         * Updates the visibility of the watermark and the text on the download buttons.
+         */
+        function updateDownloadButtonsAndWatermark() {
+            if (window.subscriptionLevel === 'Free') {
+                if (watermarkOverlay) watermarkOverlay.classList.remove('hidden');
+                if (downloadSketchBtn) downloadSketchBtn.textContent = 'Download Standard Sketch (Watermarked)';
+            } else { // Pro
+                if (watermarkOverlay) watermarkOverlay.classList.add('hidden');
+                if (downloadSketchBtn) downloadSketchBtn.textContent = 'Download High-Res Sketch (Commercial Use)';
+            }
+        }
+
+        // --- Global Constants ---
+        const apiKey = ""; 
+        const modelName = "gemini-2.5-flash-image-preview"; 
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+        const INCH_TO_CM = 2.54; 
+        
+        // --- Firestore Usage Limit Constants and Functions ---
+        const DAILY_LIMIT = 5;
+
+        /**
+         * Sets up a real-time listener to the user's daily usage limit document in Firestore.
+         */
+        function subscribeToUsageLimit() {
+            if (!window.isAuthReady || !window.db || !window.userId) return; 
+
+            // Create a date string to check for daily reset (e.g., "Mon-Dec-01-2025")
+            const today = new Date().toDateString().replace(/\s/g, '-'); 
+
+            // Document path for user's private daily limit data
+            const limitDocRef = doc(window.db, 
+                `artifacts/${appId}/users/${window.userId}/user_data/daily_limit`
+            );
+
+            // Real-time listener
+            window.usageUnsubscribe = onSnapshot(limitDocRef, async (docSnap) => {
+                let usageData = { date: today, remaining: DAILY_LIMIT };
+
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    
+                    // Check if the saved date is today. If not, reset the count.
+                    if (data.date === today) {
+                        usageData = data;
+                    } else {
+                        // It's a new day, reset and update Firestore
+                        usageData = { date: today, remaining: DAILY_LIMIT };
+                        // Note: Added try-catch for robustness in a multi-user environment
+                        try {
+                            await setDoc(limitDocRef, usageData);
+                        } catch(e) {
+                             console.error("Error resetting daily limit document:", e);
+                        }
+                    }
+                } else {
+                    // Document doesn't exist, create it with full limit
+                    // Note: Added try-catch for robustness in a multi-user environment
+                    try {
+                        await setDoc(limitDocRef, usageData);
+                    } catch(e) {
+                         console.error("Error creating daily limit document:", e);
+                    }
+                }
+                
+                window.generationsRemaining = usageData.remaining;
+                window.usageIsSubscribed = true;
+                checkAndDisplayLimit(); // Update UI
+                
+            }, (error) => {
+                console.error("Firestore usage limit error:", error);
+                window.generationsRemaining = 0; // Assume 0 on error
+                checkAndDisplayLimit();
+            });
+        }
+
+        /**
+         * Checks the current usage against the daily limit and updates the UI.
+         */
+        function checkAndDisplayLimit() {
+            // If the user is Pro, always allow generation
+            if (window.subscriptionLevel === 'Pro') {
+                usageStatus.classList.add('hidden');
+                generateButton.disabled = false;
+                generateButton.textContent = "Generate High-Res Design";
+                return true; 
+            }
+            
+            // Free Tier Logic - Requires Firestore data readiness
+            if (window.generationsRemaining === null || !window.isAuthReady) {
+                usageStatus.innerHTML = `Loading daily usage limit...`;
+                usageStatus.classList.remove('hidden');
+                generateButton.disabled = true;
+                return false;
+            }
+            
+            // Free Tier Logic 
+            usageStatus.classList.remove('hidden');
+            const remaining = window.generationsRemaining;
+            
+            // Update UI
+            if (usageStatus) {
+                if (remaining > 0) {
+                    usageStatus.innerHTML = `You have <span class="text-indigo-900 font-bold">${remaining}</span> persistent design generations remaining for today (Free Tier).`;
+                    generateButton.disabled = false;
+                    generateButton.textContent = "Generate Design";
+                } else {
+                    usageStatus.innerHTML = `**Daily Limit Reached (0 remaining).** Upgrade to Pro for unlimited designs.`;
+                    generateButton.disabled = true;
+                    generateButton.textContent = "Limit Reached";
+                    errorMessage.classList.add('hidden'); // Hide any previous error message
+                }
+            }
+            return remaining > 0;
+        }
+
+        /**
+         * Decrements the usage count in Firestore by 1.
+         */
+        async function decrementUsageCount() {
+            if (window.subscriptionLevel === 'Pro') return; 
+            if (window.generationsRemaining <= 0) return;
+
+            const limitDocRef = doc(window.db, 
+                `artifacts/${appId}/users/${window.userId}/user_data/daily_limit`
+            );
+            
+            try {
+                // Update the remaining count in Firestore
+                await updateDoc(limitDocRef, { 
+                    remaining: window.generationsRemaining - 1
+                });
+            } catch (e) {
+                console.error("Error decrementing usage count:", e);
+            }
+        }
+        
+        // Function to update unit labels in the UI
+        function updateUnitLabels() {
+            const unit = measurementUnitInput.value;
+            for (const key in unitLabels) {
+                if (unitLabels[key]) {
+                    unitLabels[key].textContent = unit;
+                }
+            }
+        }
+
+        /**
+         * Converts a File object into a Base64 string (excluding the MIME prefix).
+         */
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => {
+                    const base64String = reader.result.split(',')[1];
+                    resolve(base64String);
+                };
+                reader.onerror = (error) => reject(error);
+            });
+        }
+        
+        /**
+         * Initializes and runs the Three.js 3D scene.
+         */
+        function initThreeJS(measurementsCM, color, userInputs) {
+            if (!threeContainer) {
+                console.error("Three.js container not found.");
+                return;
+            }
+
+            // Clear previous canvas
+            while(threeContainer.firstChild) {
+                threeContainer.removeChild(threeContainer.firstChild);
+            }
+
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xf0f4f8); 
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(75, threeContainer.clientWidth / threeContainer.clientHeight, 0.1, 1000);
+            camera.position.z = 2.5;
+            camera.position.y = 1; 
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(threeContainer.clientWidth, threeContainer.clientHeight);
+            threeContainer.appendChild(renderer.domElement);
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambientLight);
+            const pointLight = new THREE.PointLight(0xffffff, 1.5);
+            pointLight.position.set(5, 5, 5);
+            scene.add(pointLight);
+
+            // --- Mannequin Geometry ---
+            const bodyColor = new THREE.Color(color.startsWith('#') ? color : 0xcccccc); 
+            const bodyMaterial = new THREE.MeshPhongMaterial({ color: bodyColor, shininess: 30 }); 
+            
+            const baseHeight = 1.70; 
+            const scaleFactor = measurementsCM.height / 170;
+            const figureHeight = baseHeight * scaleFactor;
+
+            // Torso 
+            const torsoGeometry = new THREE.CylinderGeometry(0.2 * scaleFactor, 0.25 * scaleFactor, 0.8 * scaleFactor, 16);
+            const torso = new THREE.Mesh(torsoGeometry, bodyMaterial);
+            torso.position.y = figureHeight * 0.5;
+            scene.add(torso);
+            mannequin = torso;
+
+            // Head 
+            const headGeometry = new THREE.SphereGeometry(0.12 * scaleFactor, 32, 32);
+            // Use a neutral gray for the head
+            const headMaterial = new THREE.MeshPhongMaterial({ color: 0xdddddd });
+            const head = new THREE.Mesh(headGeometry, headMaterial);
+            head.position.y = figureHeight + 0.12 * scaleFactor;
+            scene.add(head);
+
+            // Base platform
+            const baseGeometry = new THREE.CylinderGeometry(1.5, 1.5, 0.05, 64);
+            const baseMaterial = new THREE.MeshPhongMaterial({ color: 0xdddddd });
+            const base = new THREE.Mesh(baseGeometry, baseMaterial);
+            base.position.y = -0.025;
+            scene.add(base);
+
+            // Add simple interactivity (Rotation)
+            let isDragging = false;
+            let previousMousePosition = { x: 0, y: 0 };
+            
+            // Mouse/Touch controls for rotation
+            renderer.domElement.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                previousMousePosition.x = e.clientX;
+            });
+            renderer.domElement.addEventListener('mouseup', () => {
+                isDragging = false;
+            });
+            renderer.domElement.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                const deltaX = e.clientX - previousMousePosition.x;
+                torso.rotation.y += deltaX * 0.01;
+                head.rotation.y = torso.rotation.y;
+                previousMousePosition.x = e.clientX;
+            });
+            renderer.domElement.addEventListener('touchstart', (e) => {
+                isDragging = true;
+                previousMousePosition.x = e.touches[0].clientX;
+            });
+            renderer.domElement.addEventListener('touchend', () => {
+                isDragging = false;
+            });
+            renderer.domElement.addEventListener('touchmove', (e) => {
+                if (!isDragging) return;
+                e.preventDefault();
+                const deltaX = e.touches[0].clientX - previousMousePosition.x;
+                torso.rotation.y += deltaX * 0.01;
+                head.rotation.y = torso.rotation.y;
+                previousMousePosition.x = e.touches[0].clientX;
+            });
+
+
+            // Animation Loop
+            function animate() {
+                requestAnimationFrame(animate);
+                renderer.render(scene, camera);
+            }
+            animate();
+
+            // Handle window resize
+            window.addEventListener('resize', onWindowResize, false);
+            function onWindowResize() {
+                camera.aspect = threeContainer.clientWidth / threeContainer.clientHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(threeContainer.clientWidth, threeContainer.clientHeight);
+            }
+
+            // Update Measurement Overlay
+            if(measurementOverlay) {
+                measurementOverlay.innerHTML = `
+                    <span class="font-bold">Model Measurements:</span><br>
+                    Unit: ${userInputs.unit.toUpperCase()}<br>
+                    Height: ${userInputs.height} ${userInputs.unit} (${measurementsCM.height.toFixed(0)} cm)<br>
+                    Bust: ${userInputs.bust} ${userInputs.unit} (${measurementsCM.bust.toFixed(0)} cm)<br>
+                    Waist: ${userInputs.waist} ${userInputs.unit} (${measurementsCM.waist.toFixed(0)} cm)<br>
+                    Hips: ${userInputs.hips} ${userInputs.unit} (${measurementsCM.hips.toFixed(0)} cm)<br>
+                    Color: <span style="font-weight: bold; color: ${color.startsWith('#') ? color : 'inherit'};">${color}</span>
+                `;
+            }
+        }
+
+        /**
+         * Generic exponential backoff function for API retries.
+         */
+        async function exponentialBackoff(fn, maxRetries = 5) {
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    return await fn();
+                } catch (error) {
+                    if (i === maxRetries - 1) throw error;
+                    const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+        }
+
+        /**
+         * Calls the Gemini API to generate the fashion sketch using text and optional image input.
+         * Note: In a production environment, this function should be proxied through a secure backend 
+         * to prevent the hardcoded apiKey from being exposed.
+         */
+        async function generateSketch(promptText, imageData) {
+            if (!promptText) throw new Error("Prompt is empty.");
+            
+            const parts = [{ text: promptText }];
+
+            if (imageData && imageData.base64 && imageData.mimeType) {
+                parts.push({
+                    inlineData: {
+                        mimeType: imageData.mimeType,
+                        data: imageData.base64
+                    }
+                });
+            }
+
+            const payload = {
+                contents: [{ parts: parts }],
+                generationConfig: {
+                    responseModalities: ['TEXT', 'IMAGE']
+                },
+            };
+
+            const fetchConfig = () => fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const response = await exponentialBackoff(fetchConfig);
+
+            if (!response.ok) {
+                const errorBody = await response.text();
+                throw new Error(`API call failed: ${response.status} - ${errorBody}`);
+            }
+
+            const result = await response.json();
+            
+            const candidate = result?.candidates?.[0];
+            const imagePart = candidate?.content?.parts?.find(p => p.inlineData?.mimeType?.startsWith('image/'));
+
+            if (!imagePart || !imagePart.inlineData?.data) {
+                throw new Error("AI did not return a valid image. Try adjusting your prompt.");
+            }
+            
+            // Store the full image data URL for download
+            const imageUrl = `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`;
+            lastGeneratedData.sketchUrl = imageUrl;
+            
+            return imageUrl;
+        }
+
+        /**
+         * Generates mock affiliate links based on the design inputs and injects them into the UI.
+         */
+        function generateAffiliateLinks(fabric, color) {
+            if (!affiliateListEl || !suggestedFabricNameEl) return;
+
+            // Clear previous links
+            affiliateListEl.innerHTML = '';
+            suggestedFabricNameEl.textContent = fabric;
+
+            const mockSuppliers = [
+                { 
+                    name: `Premium ${fabric} in ${color}`, 
+                    description: `High-quality, ethically sourced ${fabric} for your main garment.`, 
+                    link: `https://mockaffiliate.com/buy/${fabric}-${color}`,
+                    partner: 'Luxury Textile Co.',
+                    icon: '🧵'
+                },
+                { 
+                    name: `Matching Sewing Thread Set`, 
+                    description: `A 10-spool set with colors matching your design. Essential for construction.`, 
+                    link: `https://mockaffiliate.com/buy/thread-set`,
+                    partner: 'Haberdashery Hub',
+                    icon: '🧶'
+                },
+                { 
+                    name: `Design Sketchbook & Tools`, 
+                    description: 'Capture your next idea with a recommended sketchbook and pen set.', 
+                    link: `https://mockaffiliate.com/buy/sketchbook`,
+                    partner: 'Art Supply Depot',
+                    icon: '📓'
+                }
+            ];
+
+            // Add a fourth, color-specific link if it's an expensive fabric
+            if (['Silk', 'Leather', 'Velvet'].includes(fabric)) {
+                mockSuppliers.push({
+                    name: `Specialty Embellishments`,
+                    description: `Crystal beading or custom embroidery patches matching the ${color} tone.`,
+                    link: `https://mockaffiliate.com/buy/embellishments-${color}`,
+                    partner: 'Couture Trims',
+                    icon: '💎'
+                });
+            }
+
+            mockSuppliers.forEach(supplier => {
+                const cardHtml = `
+                    <a href="${supplier.link}" target="_blank" class="block p-4 bg-white rounded-lg shadow-md hover:shadow-lg transition duration-150 border border-yellow-100 group">
+                        <div class="flex items-start">
+                            <span class="text-3xl mr-3">${supplier.icon}</span>
+                            <div>
+                                <p class="text-lg font-bold text-gray-800 group-hover:text-indigo-600">${supplier.name}</p>
+                                <p class="text-xs text-gray-500 mb-1">Partner: ${supplier.partner}</p>
+                                <p class="text-sm text-gray-600">${supplier.description}</p>
+                                <span class="text-xs text-indigo-500 mt-2 inline-block font-medium">View Product &rarr;</span>
+                            </div>
+                        </div>
+                    </a>
+                `;
+                affiliateListEl.insertAdjacentHTML('beforeend', cardHtml);
+            });
+        }
+
+        /**
+         * Implements the download logic for any data URL (e.g., the sketch image).
+         */
+        function downloadDataURL(dataURL, filename) {
+            const link = document.createElement('a');
+            link.href = dataURL;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        /**
+         * Creates a JSON blob from the prompt data and triggers download.
+         */
+        function downloadJsonData(data, filename) {
+            const json = JSON.stringify(data, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            URL.revokeObjectURL(url);
+        }
+        
+        /**
+         * Main function to handle the design generation process.
+         */
+        async function handleGenerateDesign(e) {
+            e.preventDefault();
+
+            // --- Access Control Logic (Uses checkAndDisplayLimit which now checks Firestore) ---
+            if (!checkAndDisplayLimit()) {
+                errorMessage.textContent = window.generationsRemaining === 0 ? "Daily limit reached. Upgrade to Pro." : "Authentication not ready. Please wait.";
+                errorMessage.classList.remove('hidden');
+                return; 
+            }
+            
+            const description = descriptionInput.value.trim();
+            const fabric = fabricInput.value;
+            const color = colorNameInput.value.trim() || colorPickerInput.value; 
+            const unit = measurementUnitInput.value;
+            
+            const userInputs = {
+                unit: unit,
+                height: parseFloat(heightInput.value),
+                bust: parseFloat(bustInput.value),
+                waist: parseFloat(waistInput.value),
+                hips: parseFloat(hipsInput.value),
+            };
+            
+            let measurementsCM = {};
+            if (unit === 'in') {
+                measurementsCM = {
+                    height: userInputs.height * INCH_TO_CM,
+                    bust: userInputs.bust * INCH_TO_CM,
+                    waist: userInputs.waist * INCH_TO_CM,
+                    hips: userInputs.hips * INCH_TO_CM,
+                };
+            } else {
+                measurementsCM = userInputs;
+            }
+
+            // Validation
+            if (!description && !uploadedImageBase64) {
+                errorMessage.textContent = "Please provide an outfit description or a reference image.";
+                errorMessage.classList.remove('hidden');
+                return;
+            }
+            if (Object.values(userInputs).slice(1).some(val => isNaN(val))) {
+                 errorMessage.textContent = "Please provide valid numerical body measurements.";
+                errorMessage.classList.remove('hidden');
+                return;
+            }
+
+            // Prepare image data for API call
+            const imageData = uploadedImageBase64 ? { 
+                base64: uploadedImageBase64, 
+                mimeType: uploadedImageMimeType 
+            } : null;
+
+            // Clear previous results and show loading
+            errorMessage.classList.add('hidden');
+            if (placeholderContent) placeholderContent.classList.add('hidden');
+            if (resultsArea) resultsArea.classList.add('hidden');
+            loadingArea.classList.remove('hidden');
+            generateButton.disabled = true;
+            generateButton.textContent = "Sketching...";
+
+            // Construct the detailed prompt
+            const baseDescription = description || "a new fashion design inspired by the attached image";
+            
+            // Tier-based prompt modification for resolution and quality
+            let resolutionNote = "";
+            if (window.subscriptionLevel === 'Pro') {
+                resolutionNote = "Output must be Ultra-High Resolution, 8k quality, professional production-ready line art with extreme material detail and flawless shading for commercial use.";
+            } else {
+                resolutionNote = "Output must be Standard Resolution, sketch quality, suitable for conceptual design only.";
+            }
+
+            const prompt = `Create a highly detailed, professional fashion design sketch of ${baseDescription}. The garment is in the color ${color}. The primary fabric is ${fabric}. The design is modeled on a figure with a height of ${measurementsCM.height.toFixed(0)}cm, bust of ${measurementsCM.bust.toFixed(0)}cm, waist of ${measurementsCM.waist.toFixed(0)}cm, and hips of ${measurementsCM.hips.toFixed(0)}cm. Focus on texture, folds, silhouette, and accurate color representation. Style: Clean line art, white studio background, high fashion concept. ${resolutionNote}`;
+            
+            // Store data before API call for JSON download
+            lastGeneratedData = {
+                design_description: description,
+                primary_color: color,
+                fabric: fabric,
+                prompt_used: prompt,
+                measurements_input: userInputs,
+                measurements_cm: measurementsCM,
+                subscription_tier: window.subscriptionLevel,
+                timestamp: new Date().toISOString()
+            };
+
+            try {
+                // 1. Generate the 2D Sketch
+                const imageUrl = await generateSketch(prompt, imageData);
+
+                // 2. Display the 2D sketch
+                if (sketchOutput) sketchOutput.src = imageUrl;
+
+                // 3. Render the 3D model with updated measurements (using the color input for visualization)
+                initThreeJS(measurementsCM, color, userInputs);
+
+                // 4. Show results
+                if (resultsArea) resultsArea.classList.remove('hidden');
+                
+                // 5. Update watermark and download button based on results
+                updateDownloadButtonsAndWatermark();
+
+                // 6. Decrement Usage Count (only for Free users, using Firestore)
+                await decrementUsageCount();
+                
+                // 7. Generate Affiliate Links
+                generateAffiliateLinks(fabric, color);
+
+
+            } catch (error) {
+                console.error("Design Generation Error:", error);
+                errorMessage.textContent = `Error generating design: ${error.message}. Please try again.`;
+                if (placeholderContent) placeholderContent.classList.remove('hidden');
+                if (resultsArea) resultsArea.classList.add('hidden');
+                errorMessage.classList.remove('hidden');
+            } finally {
+                // Reset UI 
+                loadingArea.classList.add('hidden');
+                checkAndDisplayLimit();
+            }
+        }
+
+        /**
+         * Shows a modal simulating a secure payment checkout session creation.
+         */
+        function showProUpgradeModal() {
+             const token = crypto.randomUUID().substring(0, 12); // Simulate a secure session token
+            
+            const modalHtml = `
+                <div id="pro-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50">
+                    <div class="bg-white p-6 rounded-lg shadow-2xl max-w-lg w-full">
+                        <h3 class="text-2xl font-bold text-indigo-700 mb-4 text-center">Unlock Pro Features</h3>
+                        
+                        <div class="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                            <p class="font-semibold text-gray-800 mb-2">Your Benefits:</p>
+                            <ul class="list-disc list-inside text-sm text-gray-600 space-y-1">
+                                <li>Unlimited Daily Generations</li>
+                                <li>High-Resolution, Watermark-Free Downloads</li>
+                                <li>Commercial Usage Rights</li>
+                            </ul>
+                        </div>
+
+                        <p class="text-gray-700 mb-4 text-sm">We are preparing your secure checkout session. Your unique session ID is:</p>
+                        <div class="text-center bg-indigo-100 text-indigo-800 p-2 rounded-md font-mono mb-6 overflow-x-auto">
+                            ${token}
+                        </div>
+
+                        <p class="text-sm text-gray-600 mb-6">Clicking 'Proceed to Payment' will simulate a redirect to our payment partner (e.g., Stripe) to complete your subscription. Upon successful payment, your tier status will update automatically.</p>
+
+                        <div class="flex justify-end space-x-3">
+                            <button onclick="document.getElementById('pro-modal').remove()" class="bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 transition duration-150">
+                                Cancel
+                            </button>
+                            <button onclick="simulatePaymentRedirect()" class="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition duration-150">
+                                Proceed to Payment
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+        }
+
+        /**
+         * Simulates the actual redirect to the payment gateway.
+         */
+        function simulatePaymentRedirect() {
+            // Remove the modal
+            document.getElementById('pro-modal')?.remove();
+            
+            const simulationModal = `
+                <div id="simulation-modal" class="fixed inset-0 bg-emerald-900 bg-opacity-75 flex items-center justify-center z-50">
+                    <div class="bg-white p-8 rounded-xl shadow-2xl max-w-md w-full text-center border-t-4 border-emerald-500">
+                        <svg class="mx-auto h-12 w-12 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        <h3 class="text-xl font-bold text-emerald-700 mt-3 mb-2">Payment Simulation Success!</h3>
+                        <p class="text-gray-600 mb-4">You would have successfully subscribed to Pro. Your status is now being updated in real-time via Firestore.</p>
+                        <button onclick="document.getElementById('simulation-modal').remove(); activateProStatusMock();" class="bg-emerald-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-emerald-700 transition duration-150">
+                            View Pro Benefits
+                        </button>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', simulationModal);
+        }
+
+        /**
+         * Mocks the backend webhook response by setting the user's status to Pro in Firestore.
+         */
+        async function activateProStatusMock() {
+             if (!window.db || !window.userId) {
+                console.error("Cannot mock Pro status: Firebase not ready.");
+                return;
+            }
+
+            const statusDocRef = doc(window.db, 
+                `artifacts/${appId}/users/${window.userId}/user_data/status_document`
+            );
+            
+            try {
+                // This simulates the payment processor's webhook hitting our backend, 
+                // which then updates the user's status in Firestore.
+                await setDoc(statusDocRef, { 
+                    subscriptionLevel: "Pro",
+                    proActivatedAt: new Date().toISOString()
+                }, { merge: true });
+
+            } catch (error) {
+                console.error("Error setting Pro status mock:", error);
+            }
+        }
+        
+        /**
+         * Handles the submission of user feedback to Firestore.
+         */
+        async function sendFeedback(feedbackText) {
+            if (!feedbackText || feedbackText.length < 5) return;
+            if (!window.db || !window.userId) {
+                console.error("Cannot send feedback: Firebase not ready.");
+                return;
+            }
+
+            // Use the public path for feedback as the app owner will collect it
+            const feedbackCollectionRef = collection(window.db, 
+                `artifacts/${appId}/public/data/feedback`
+            );
+            
+            try {
+                await addDoc(feedbackCollectionRef, { 
+                    userId: window.userId, 
+                    feedback: feedbackText,
+                    subscriptionLevel: window.subscriptionLevel,
+                    timestamp: new Date().toISOString()
+                });
+                return true; // Success
+            } catch (error) {
+                console.error("Error saving feedback:", error);
+                return false; // Failure
+            }
+        }
+        
+        /**
+         * Displays a modal for user feedback.
+         */
+        function showFeedbackModal() {
+            // Check if modal already exists
+            if (document.getElementById('feedback-modal')) return;
+
+            const modalHtml = `
+                <div id="feedback-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50">
+                    <div class="bg-white p-6 rounded-lg shadow-2xl max-w-md w-full">
+                        <h3 class="text-xl font-bold text-gray-800 mb-4">Send Us Your Feedback</h3>
+                        
+                        <p class="text-sm text-gray-600 mb-3">Help us improve the AI Fashion Designer! What did you love or what should we add?</p>
+                        
+                        <textarea id="feedback-text-area" rows="4" class="w-full border border-gray-300 rounded-lg p-3 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150" placeholder="Your suggestions, bugs, or praise..."></textarea>
+                        
+                        <p id="feedback-message" class="text-xs mt-2 text-center hidden"></p>
+
+                        <div class="flex justify-end space-x-3 mt-4">
+                            <button id="cancel-feedback-btn" class="bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 transition duration-150">
+                                Cancel
+                            </button>
+                            <button id="submit-feedback-btn" class="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition duration-150">
+                                Submit Feedback
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+            // Add event listeners to the new modal
+            const modal = document.getElementById('feedback-modal');
+            const submitBtn = document.getElementById('submit-feedback-btn');
+            const cancelBtn = document.getElementById('cancel-feedback-btn');
+            const textArea = document.getElementById('feedback-text-area');
+            const messageEl = document.getElementById('feedback-message');
+
+            cancelBtn.addEventListener('click', () => modal.remove());
+            
+            submitBtn.addEventListener('click', async () => {
+                const feedbackText = textArea.value.trim();
+                messageEl.classList.remove('hidden');
+                messageEl.classList.remove('text-red-500', 'text-green-500');
+
+                if (feedbackText.length < 5) {
+                    messageEl.textContent = "Feedback must be at least 5 characters long.";
+                    messageEl.classList.add('text-red-500');
+                    return;
+                }
+                
+                submitBtn.disabled = true;
+                submitBtn.textContent = "Sending...";
+                
+                const success = await sendFeedback(feedbackText);
+                
+                if (success) {
+                    messageEl.textContent = "Thank you! Your feedback has been recorded.";
+                    messageEl.classList.add('text-green-500');
+                    // Automatically close after a short delay
+                    setTimeout(() => modal.remove(), 1500);
+                } else {
+                    messageEl.textContent = "Error sending feedback. Please try again.";
+                    messageEl.classList.add('text-red-500');
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = "Submit Feedback";
+                }
+            });
+        }
+
+
+        // --- Event Listener Assignments and Initial App Setup ---
+        
+        // Use 'let' for all DOM elements and define them globally. They will be assigned 
+        // inside window.onload to ensure the DOM is ready.
+        let form, descriptionInput, imageUploadInput, imagePreviewContainer, imagePreview, fabricInput, colorNameInput, colorPickerInput, measurementUnitInput, heightInput, bustInput, waistInput, hipsInput, generateButton, loadingArea, errorMessage, placeholderContent, resultsArea, sketchOutput, measurementOverlay, threeContainer, unitLabels, usageStatus, watermarkOverlay;
+        let downloadSketchBtn, downloadDataBtn, affiliateListEl, suggestedFabricNameEl, feedbackBtnEl; 
+        let lastGeneratedData = {};
+        let uploadedImageBase64 = null;
+        let uploadedImageMimeType = null;
+        let scene, camera, renderer, mannequin, controls;
+
+        
+        window.onload = function () {
+            // 1. Assign all DOM elements 
+            form = document.getElementById('design-form');
+            descriptionInput = document.getElementById('description');
+            imageUploadInput = document.getElementById('image-upload');
+            imagePreviewContainer = document.getElementById('image-preview-container');
+            imagePreview = document.getElementById('image-preview');
+            fabricInput = document.getElementById('fabric');
+            colorNameInput = document.getElementById('color-name');
+            colorPickerInput = document.getElementById('color-picker');
+            measurementUnitInput = document.getElementById('measurement-unit');
+            heightInput = document.getElementById('height');
+            bustInput = document.getElementById('bust');
+            waistInput = document.getElementById('waist');
+            hipsInput = document.getElementById('hips');
+            generateButton = document.getElementById('generate-button');
+            loadingArea = document.getElementById('loading-area');
+            errorMessage = document.getElementById('error-message');
+            placeholderContent = document.getElementById('placeholder-content');
+            resultsArea = document.getElementById('results-area');
+            sketchOutput = document.getElementById('sketch-output');
+            measurementOverlay = document.getElementById('measurement-overlay');
+            threeContainer = document.getElementById('three-container'); 
+            downloadSketchBtn = document.getElementById('download-sketch-btn'); 
+            downloadDataBtn = document.getElementById('download-data-btn'); 
+            usageStatus = document.getElementById('usage-status'); 
+            watermarkOverlay = document.getElementById('watermark-overlay');
+            
+            // NEW DOM element assignments
+            authStatusEl = document.getElementById('auth-status');
+            currentUserIdEl = document.getElementById('current-user-id');
+            subscriptionTierEl = document.getElementById('subscription-tier');
+            goProButtonEl = document.getElementById('go-pro-button'); 
+            affiliateListEl = document.getElementById('affiliate-list'); 
+            suggestedFabricNameEl = document.getElementById('suggested-fabric-name');
+            outreachStatusEl = document.getElementById('outreach-status');
+            feedbackBtnEl = document.getElementById('feedback-btn');
+
+            // Assign Unit Label elements
+            unitLabels = {
+                height: document.getElementById('unit-height'),
+                bust: document.getElementById('unit-bust'),
+                waist: document.getElementById('unit-waist'),
+                hips: document.getElementById('unit-hips'),
+            };
+
+            // 2. Attach all event listeners 
+            imageUploadInput.addEventListener('change', async (event) => {
+                const file = event.target.files[0];
+                if (file) {
+                    try {
+                        uploadedImageBase64 = await fileToBase64(file);
+                        uploadedImageMimeType = file.type;
+                        imagePreview.src = URL.createObjectURL(file);
+                        imagePreviewContainer.classList.remove('hidden');
+                    } catch (error) {
+                        console.error("Error reading file:", error);
+                        errorMessage.textContent = "Could not read the image file.";
+                        errorMessage.classList.remove('hidden');
+                        imagePreviewContainer.classList.add('hidden');
+                        uploadedImageBase64 = null;
+                        uploadedImageMimeType = null;
+                    }
+                } else {
+                    imagePreviewContainer.classList.add('hidden');
+                    uploadedImageBase64 = null;
+                    uploadedImageMimeType = null;
+                }
+            });
+            colorPickerInput.addEventListener('input', (e) => {
+                colorNameInput.value = e.target.value; 
+            });
+            measurementUnitInput.addEventListener('change', updateUnitLabels);
+            form.addEventListener('submit', handleGenerateDesign);
+            downloadSketchBtn.addEventListener('click', () => {
+                if (lastGeneratedData.sketchUrl) {
+                    downloadDataURL(lastGeneratedData.sketchUrl, 'ai-fashion-sketch.png');
+                }
+            });
+            downloadDataBtn.addEventListener('click', () => {
+                if (lastGeneratedData.prompt_used) {
+                    downloadJsonData(lastGeneratedData, 'ai-design-data.json');
+                }
+            });
+            goProButtonEl.addEventListener('click', showProUpgradeModal);
+            
+            // Feedback button listener
+            feedbackBtnEl.addEventListener('click', showFeedbackModal);
+
+
+            // 3. Initial App Setup
+            const initialMeasurementsCM = { height: 170, bust: 90, waist: 70, hips: 95 };
+            const initialInputs = { unit: 'cm', height: 170, bust: 90, waist: 70, hips: 95 };
+            initThreeJS(initialMeasurementsCM, colorNameInput.value, initialInputs);
+            updateUnitLabels();
+
+            // 4. Initialize Firebase and Authentication
+            initFirebaseAndAuth();
+
+            // 5. Simulate Niche Outreach Success Message
+            if (outreachStatusEl) {
+                outreachStatusEl.classList.remove('hidden');
+                // Use a slight delay to trigger the opacity transition
+                setTimeout(() => outreachStatusEl.classList.add('opacity-100'), 10);
+            }
+        }
+
+    </script>
+</body>
+</html>
