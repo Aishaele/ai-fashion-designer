@@ -449,7 +449,11 @@
         }
 
         // --- Global Constants ---
-        const apiKey = "AIzaSyB5IgtWgF39ZNUxA4-Sty-Pge0bRd-nLdM"; 
+        // =============================================================================================
+        // *** CRITICAL FIX FOR GITHUB PAGES DEPLOYMENT ***
+        // KEY INSERTED HERE: Ensure this key is valid and has no HTTP Referrer restrictions in Google Cloud Console.
+        // =============================================================================================
+        const apiKey = "AIzaSyB5IgtWgF39ZNUxA4-Sty-Pge0bRd-nLdM"; // <--- Your key has been inserted here.
         const modelName = "gemini-2.5-flash-image-preview"; 
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
         const INCH_TO_CM = 2.54; 
@@ -777,6 +781,11 @@
         async function generateSketch(promptText, imageData) {
             if (!promptText) throw new Error("Prompt is empty.");
             
+            // CRITICAL CHECK: API Key must be set for static hosting
+            if (apiKey === "YOUR_GEMINI_API_KEY_HERE" || !apiKey) {
+                throw new Error("API Key is missing. Please set your Gemini API key in the script to use the generator on static hosts like GitHub Pages.");
+            }
+
             const parts = [{ text: promptText }];
 
             if (imageData && imageData.base64 && imageData.mimeType) {
@@ -794,6 +803,13 @@
                     responseModalities: ['TEXT', 'IMAGE']
                 },
             };
+            
+            // ==========================================================
+            // *** DEBUGGING STEP ADDED HERE ***
+            // Log the URL to the console so you can verify the API key is present.
+            // If the key is not present in the URL, the problem is with the `apiKey` variable assignment.
+            // ==========================================================
+            console.log("Attempting API call to:", apiUrl);
 
             const fetchConfig = () => fetch(apiUrl, {
                 method: 'POST',
@@ -930,6 +946,14 @@
                 return; 
             }
             
+            // CRITICAL CHECK: API Key must be set before attempting fetch
+            if (apiKey === "YOUR_GEMINI_API_KEY_HERE" || !apiKey) {
+                errorMessage.textContent = "API Key Error: Please paste your Gemini API key into the script to use the generator on static hosting.";
+                errorMessage.classList.remove('hidden');
+                return;
+            }
+
+
             const description = descriptionInput.value.trim();
             const fabric = fabricInput.value;
             const color = colorNameInput.value.trim() || colorPickerInput.value; 
@@ -1031,7 +1055,8 @@
 
             } catch (error) {
                 console.error("Design Generation Error:", error);
-                errorMessage.textContent = `Error generating design: ${error.message}. Please try again.`;
+                // Display a user-friendly error, including the full API error message for advanced debugging
+                errorMessage.textContent = `Error generating design: ${error.message}. Please check your console for the full API URL and error details.`;
                 if (placeholderContent) placeholderContent.classList.remove('hidden');
                 if (resultsArea) resultsArea.classList.add('hidden');
                 errorMessage.classList.remove('hidden');
