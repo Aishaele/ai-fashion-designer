@@ -12,7 +12,7 @@
         /* Custom styles for aesthetic */
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #9ba0a5;
+            background-color: #f7f9fb;
         }
         #design-output-container {
             min-height: 400px;
@@ -273,6 +273,8 @@
         // ====================================================================
         // FIX: Utilize Canvas-provided global variables for Firebase configuration and authentication
         // This ensures the app works correctly in the hosting environment.
+        // NOTE: These variables are undefined when hosted outside the Canvas environment (e.g., GitHub Pages).
+        // We will adapt to a 'Static Demo Mode' if they are missing.
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
@@ -284,6 +286,7 @@
         window.app = null;
         window.userId = null;
         window.isAuthReady = false;
+        window.isStaticMode = false; // NEW FLAG
         
         // Default subscription level (will be overwritten by Firestore)
         window.subscriptionLevel = "Free"; 
@@ -291,7 +294,7 @@
         window.generationsRemaining = null; 
         window.usageUnsubscribe = null; 
         window.usageIsSubscribed = false; 
-
+        
         // --- Global DOM elements for status (Assigned in window.onload) ---
         let authStatusEl, currentUserIdEl, subscriptionTierEl, goProButtonEl, outreachStatusEl;
 
@@ -303,10 +306,15 @@
             try {
                 // FIX: Check if firebaseConfig is null (which happens outside of the Canvas environment)
                 if (!firebaseConfig) {
-                    console.error("Firebase Configuration is missing. Firestore persistence and user status will not work. (Did you deploy the app?)");
-                    if (authStatusEl) authStatusEl.textContent = "Config Error";
+                    console.error("Firebase Configuration is missing. Running in Static Demo Mode (No persistence/auth).");
+                    if (authStatusEl) authStatusEl.textContent = "Static Demo Mode (Local Limit)";
+                    if (currentUserIdEl) currentUserIdEl.textContent = "Demo-User";
                     window.isAuthReady = true; 
-                    return;
+                    window.isStaticMode = true; // Set the new flag
+                    window.userId = crypto.randomUUID(); // Assign a temporary ID
+                    window.generationsRemaining = DAILY_LIMIT; // Set a local, non-persistent limit
+                    updateUserStatusUI(); // Update UI in static mode
+                    return; // Exit, skipping Firebase initialization
                 }
                 
                 // 1. Initialize Firebase App and Services
@@ -343,7 +351,7 @@
          * Sets up a real-time listener to the user's subscription document in Firestore.
          */
         function subscribeToUserStatus() {
-            if (!window.isAuthReady || !window.db || !window.userId) return;
+            if (window.isStaticMode || !window.isAuthReady || !window.db || !window.userId) return;
             
             // Define the document path for the user's private status data
             const statusDocRef = doc(window.db, 
@@ -383,9 +391,14 @@
          * Updates the new UI card with the authenticated status and subscription tier.
          */
         function updateUserStatusUI() {
-            if (authStatusEl) authStatusEl.textContent = window.isAuthReady ? "Authenticated" : "Connecting...";
-            if (currentUserIdEl) currentUserIdEl.textContent = window.userId || "N/A";
-
+            if (window.isStaticMode) {
+                authStatusEl.textContent = "Static Demo Mode";
+                currentUserIdEl.textContent = "Demo-User";
+            } else {
+                if (authStatusEl) authStatusEl.textContent = window.isAuthReady ? "Authenticated" : "Connecting...";
+                if (currentUserIdEl) currentUserIdEl.textContent = window.userId || "N/A";
+            }
+            
             if (window.subscriptionLevel === "Pro") {
                 subscriptionTierEl.textContent = "Pro (High-Res Enabled)";
                 subscriptionTierEl.classList.remove('text-red-600');
@@ -404,10 +417,15 @@
                 subscriptionTierEl.textContent = "Free (Standard-Res, Watermarked)";
                 subscriptionTierEl.classList.remove('text-indigo-600', 'font-extrabold');
                 subscriptionTierEl.classList.add('text-red-600');
-                goProButtonEl.classList.remove('hidden');
+                // Only show Pro button if not in static mode (no persistence)
+                if (!window.isStaticMode) {
+                    goProButtonEl.classList.remove('hidden');
+                } else {
+                    goProButtonEl.classList.add('hidden');
+                }
 
-                // If Free, ensure we are tracking usage limits
-                if (!window.usageIsSubscribed) {
+                // If Free, ensure we are tracking usage limits (local if static, firestore if persistent)
+                if (!window.isStaticMode && !window.usageIsSubscribed) {
                     subscribeToUsageLimit();
                 }
             }
@@ -443,7 +461,7 @@
          * Sets up a real-time listener to the user's daily usage limit document in Firestore.
          */
         function subscribeToUsageLimit() {
-            if (!window.isAuthReady || !window.db || !window.userId) return; 
+            if (window.isStaticMode || !window.isAuthReady || !window.db || !window.userId) return; 
 
             // Create a date string to check for daily reset (e.g., "Mon-Dec-01-2025")
             const today = new Date().toDateString().replace(/\s/g, '-'); 
@@ -506,6 +524,24 @@
                 return true; 
             }
             
+            // --- Static Mode Logic (No Persistence) ---
+            if (window.isStaticMode) {
+                const remaining = window.generationsRemaining;
+                usageStatus.classList.remove('hidden');
+                
+                if (remaining > 0) {
+                    usageStatus.innerHTML = `Running in <span class="text-indigo-900 font-bold">Static Demo Mode</span>. You have <span class="text-indigo-900 font-bold">${remaining}</span> designs remaining (Local Counter, resets on refresh).`;
+                    generateButton.disabled = false;
+                    generateButton.textContent = "Generate Design";
+                } else {
+                    usageStatus.innerHTML = `**Static Demo Limit Reached.** (Refresh the page to reset the local counter)`;
+                    generateButton.disabled = true;
+                    generateButton.textContent = "Limit Reached";
+                    errorMessage.classList.add('hidden');
+                }
+                return remaining > 0;
+            }
+
             // Free Tier Logic - Requires Firestore data readiness
             if (window.generationsRemaining === null || !window.isAuthReady) {
                 usageStatus.innerHTML = `Loading daily usage limit...`;
@@ -514,7 +550,7 @@
                 return false;
             }
             
-            // Free Tier Logic 
+            // Free Tier Logic (Persistence Mode)
             usageStatus.classList.remove('hidden');
             const remaining = window.generationsRemaining;
             
@@ -541,6 +577,14 @@
             if (window.subscriptionLevel === 'Pro') return; 
             if (window.generationsRemaining <= 0) return;
 
+            // --- Static Mode Logic: Decrement Local Counter ---
+            if (window.isStaticMode) {
+                 window.generationsRemaining -= 1;
+                 checkAndDisplayLimit(); // Update the UI immediately
+                 return; // Skip Firestore update
+            }
+            
+            // --- Persistence Mode Logic (Firestore) ---
             const limitDocRef = doc(window.db, 
                 `artifacts/${appId}/users/${window.userId}/user_data/daily_limit`
             );
@@ -978,7 +1022,7 @@
                 // 5. Update watermark and download button based on results
                 updateDownloadButtonsAndWatermark();
 
-                // 6. Decrement Usage Count (only for Free users, using Firestore)
+                // 6. Decrement Usage Count (local if static, firestore if persistent)
                 await decrementUsageCount();
                 
                 // 7. Generate Affiliate Links
@@ -1002,6 +1046,32 @@
          * Shows a modal simulating a secure payment checkout session creation.
          */
         function showProUpgradeModal() {
+            if (window.isStaticMode) {
+                // In static mode, just provide a simpler message since the "Pro" upgrade won't persist.
+                const uuid = window.userId.substring(0, 8);
+                const alertMessage = `Pro upgrade features are not available in Static Demo Mode. This mode is for demonstration only (User ID: ${uuid}).\n\nFor persistent features (Pro/Persistence), please run the app within the Canvas environment.`;
+                const modalHtml = `
+                    <div id="pro-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50">
+                        <div class="bg-white p-6 rounded-lg shadow-2xl max-w-lg w-full">
+                            <h3 class="text-2xl font-bold text-indigo-700 mb-4 text-center">Pro Upgrade Unavailable</h3>
+                            
+                            <div class="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+                                <p class="font-semibold text-red-700 mb-2">Static Demo Mode Detected</p>
+                                <p class="text-sm text-gray-600">${alertMessage}</p>
+                            </div>
+
+                            <div class="flex justify-end space-x-3">
+                                <button onclick="document.getElementById('pro-modal').remove()" class="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition duration-150">
+                                    Got It
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.body.insertAdjacentHTML('beforeend', modalHtml);
+                return;
+            }
+
              const token = crypto.randomUUID().substring(0, 12); // Simulate a secure session token
             
             const modalHtml = `
@@ -1065,7 +1135,7 @@
          * Mocks the backend webhook response by setting the user's status to Pro in Firestore.
          */
         async function activateProStatusMock() {
-             if (!window.db || !window.userId) {
+             if (window.isStaticMode || !window.db || !window.userId) {
                 console.error("Cannot mock Pro status: Firebase not ready.");
                 return;
             }
@@ -1091,6 +1161,11 @@
          * Handles the submission of user feedback to Firestore.
          */
         async function sendFeedback(feedbackText) {
+            if (window.isStaticMode) {
+                console.warn("Feedback skipped: Running in Static Demo Mode.");
+                return true; // Simulate success
+            }
+
             if (!feedbackText || feedbackText.length < 5) return;
             if (!window.db || !window.userId) {
                 console.error("Cannot send feedback: Firebase not ready.");
@@ -1120,7 +1195,51 @@
          * Displays a modal for user feedback.
          */
         function showFeedbackModal() {
-            // Check if modal already exists
+            if (window.isStaticMode) {
+                // In static mode, just use a simple modal
+                const modalHtml = `
+                    <div id="feedback-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50">
+                        <div class="bg-white p-6 rounded-lg shadow-2xl max-w-md w-full">
+                            <h3 class="text-xl font-bold text-gray-800 mb-4">Send Us Your Feedback</h3>
+                            <p class="text-sm text-gray-600 mb-3">Since the app is in Static Demo Mode, your feedback will not be persistently saved, but we can capture it in the console.</p>
+                            <textarea id="feedback-text-area" rows="4" class="w-full border border-gray-300 rounded-lg p-3 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150" placeholder="Your suggestions, bugs, or praise..."></textarea>
+                            <p id="feedback-message" class="text-xs mt-2 text-center hidden"></p>
+
+                            <div class="flex justify-end space-x-3 mt-4">
+                                <button id="cancel-feedback-btn" class="bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 transition duration-150">
+                                    Cancel
+                                </button>
+                                <button id="submit-feedback-btn" class="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition duration-150">
+                                    Submit Feedback (Local)
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+                // Add event listeners for static mode
+                const modal = document.getElementById('feedback-modal');
+                const submitBtn = document.getElementById('submit-feedback-btn');
+                const cancelBtn = document.getElementById('cancel-feedback-btn');
+                const textArea = document.getElementById('feedback-text-area');
+                const messageEl = document.getElementById('feedback-message');
+
+                cancelBtn.addEventListener('click', () => modal.remove());
+                submitBtn.addEventListener('click', async () => {
+                    const feedbackText = textArea.value.trim();
+                    if (feedbackText.length < 5) return;
+                    console.log(`[STATIC FEEDBACK] Received feedback from Demo-User: "${feedbackText}"`);
+                    messageEl.classList.remove('hidden', 'text-red-500');
+                    messageEl.classList.add('text-green-500');
+                    messageEl.textContent = "Feedback logged to console (Demo Mode). Thank you!";
+                    submitBtn.disabled = true;
+                    setTimeout(() => modal.remove(), 1500);
+                });
+                return;
+            }
+
+            // Check if modal already exists (Persistence Mode)
             if (document.getElementById('feedback-modal')) return;
 
             const modalHtml = `
@@ -1295,7 +1414,7 @@
             initThreeJS(initialMeasurementsCM, colorNameInput.value, initialInputs);
             updateUnitLabels();
 
-            // 4. Initialize Firebase and Authentication
+            // 4. Initialize Firebase and Authentication (will run in Static Demo Mode if config is missing)
             initFirebaseAndAuth();
 
             // 5. Simulate Niche Outreach Success Message
